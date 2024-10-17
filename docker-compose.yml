@@ -1,0 +1,188 @@
+services:
+  percona:
+    container_name: percona
+    platform: linux/amd64
+    image: percona/percona-server:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+    ports:
+      - "3306:3306"
+    volumes:
+     - percona-data:/var/lib/mysql
+     - ./backup:/backup
+    networks:
+      backend:
+
+  percona-backup:
+    container_name: percona-backup
+    platform: linux/amd64
+    image: percona/percona-server:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_TCP_PORT: 3307
+    ports:
+      - "3307:3307"
+    volumes:
+     - percona-backups:/var/lib/mysql
+    networks:
+      backend:
+
+  xtrabackup-full:
+    container_name: xtrabackup-full
+    platform: linux/amd64
+    image: percona/percona-xtrabackup:8.0
+    command: > 
+      bash -c "
+      rm -rf /backup/* &&
+      xtrabackup --backup --datadir=/var/lib/mysql/ --target-dir=/backup --user=root --password=123456"
+    volumes:
+      - percona-data:/var/lib/mysql
+      - ./full:/backup
+    networks:
+      backend:
+
+  xtrabackup-full-recovery:
+    container_name: xtrabackup-backup
+    platform: linux/amd64
+    image: percona/percona-xtrabackup:8.0
+    command: > 
+      bash -c "
+      rm -rf /var/lib/mysql/* &&
+      xtrabackup --prepare --target-dir=/backup &&
+      xtrabackup --copy-back --datadir=/var/lib/mysql/ --target-dir=/backup --user=root --password=123456 --port=3307"
+    volumes:
+      - percona-backups:/var/lib/mysql
+      - ./full:/backup
+    networks:
+      backend:
+
+  xtrabackup-incr-full-backup:
+    container_name: xtrabackup-incr-full-backup
+    platform: linux/amd64
+    image: percona/percona-xtrabackup:8.0
+    command: > 
+      bash -c "
+      rm -rf /backups/* &&
+      xtrabackup --backup --datadir=/var/lib/mysql/ --target-dir=/backups/base --user=root --password=123456"
+    volumes:
+      - percona-data:/var/lib/mysql
+      - ./incremental:/backups
+    networks:
+      backend:
+
+  xtrabackup-one-incr-backup:
+    container_name: xtrabackup-one-incr-backup
+    platform: linux/amd64
+    image: percona/percona-xtrabackup:8.0
+    command: > 
+      bash -c "
+      rm -rf /backups/inc1/ &&
+      xtrabackup --backup --target-dir=/backups/inc1 --incremental-basedir=/backups/base --user=root --password=123456"
+    volumes:
+      - percona-data:/var/lib/mysql
+      - ./incremental:/backups
+    networks:
+      backend:
+
+  xtrabackup-one-incr2-backup:
+    container_name: xtrabackup-one-incr2-backup
+    platform: linux/amd64
+    image: percona/percona-xtrabackup:8.0
+    command: > 
+      bash -c "
+      rm -rf /backups/inc2/* &&
+      xtrabackup --backup --target-dir=/backups/inc2 --incremental-basedir=/backups/inc1 --user=root --password=123456"
+    volumes:
+      - percona-data:/var/lib/mysql
+      - ./incremental:/backups
+    networks:
+      backend:
+
+  xtrabackup-increment-recovery:
+    container_name: xtrabackup-increment-recovery
+    platform: linux/amd64
+    image: percona/percona-xtrabackup:8.0
+    command: > 
+      bash -c "
+      rm -rf /var/lib/mysql/* &&
+      xtrabackup --prepare --apply-log-only --target-dir=/backups/base &&
+      xtrabackup --prepare --apply-log-only --target-dir=/backups/base --incremental-dir=/backups/inc1 &&
+      xtrabackup --prepare --target-dir=/backups/base --incremental-dir=/backups/inc2 &&
+      xtrabackup --copy-back --datadir=/var/lib/mysql/ --target-dir=/backups/base --user=root --password=123456 --port=3307"
+    volumes:
+      - percona-backups:/var/lib/mysql
+      - ./incremental:/backups
+    networks:
+      backend:
+
+  xtrabackup-differential-full:
+    container_name: xtrabackup-differential-full
+    platform: linux/amd64
+    image: percona/percona-xtrabackup:8.0
+    command: > 
+      bash -c "
+      rm -rf /diff/* &&
+      xtrabackup --backup --datadir=/var/lib/mysql/ --target-dir=/diff/base --user=root --password=123456
+      "
+    volumes:
+      - percona-data:/var/lib/mysql
+      - ./diff:/diff
+    networks:
+      backend:
+
+  xtrabackup-differential-incr1:
+    container_name: xtrabackup-differential-incr1
+    platform: linux/amd64
+    image: percona/percona-xtrabackup:8.0
+    command: > 
+      bash -c "
+      xtrabackup --backup --target-dir=/diff/inc1 --incremental-basedir=/diff/base --user=root --password=123456
+      "
+    volumes:
+      - percona-data:/var/lib/mysql
+      - ./diff:/diff
+    networks:
+      backend:
+
+  xtrabackup-differential-incr2:
+    container_name: xtrabackup-differential-incr2
+    platform: linux/amd64
+    image: percona/percona-xtrabackup:8.0
+    command: > 
+      bash -c "
+      xtrabackup --backup --target-dir=/diff/inc2 --incremental-basedir=/diff/base --user=root --password=123456
+      "
+    volumes:
+      - percona-data:/var/lib/mysql
+      - ./diff:/diff
+    networks:
+      backend:
+
+  xtrabackup-differential-recovery:
+    container_name: xtrabackup-differential-recovery
+    platform: linux/amd64
+    image: percona/percona-xtrabackup:8.0
+    command: > 
+      bash -c "
+      rm -rf /var/lib/mysql/* &&
+      xtrabackup --prepare --apply-log-only --target-dir=/diff/base &&
+      xtrabackup --prepare --target-dir=/diff/base --incremental-dir=/diff/inc2 &&
+      xtrabackup --copy-back --datadir=/var/lib/mysql/ --target-dir=/diff/base --user=root --password=123456 --port=3307"
+    volumes:
+      - percona-backups:/var/lib/mysql
+      - ./diff:/diff
+    networks:
+      backend:
+
+volumes:
+  percona-data:
+  percona-backups:
+
+networks:
+  backend:
+
+
+# sudo docker create --name percona-xtrabackup --volumes-from percona-server-mysql:8.0 \
+#percona/percona-xtrabackup:8.0  \
+#xtrabackup --backup --datadir=/var/lib/mysql/ --target-dir=/backup \
+#--user=root --password=root
